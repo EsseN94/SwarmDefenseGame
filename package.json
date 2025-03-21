@@ -1,0 +1,16 @@
+{
+  "name": "swarm-game",
+  "version": "1.0.0",
+  "description": "A wave-based survival game with character progression",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "parcel src/index.html",
+    "build": "parcel build src/index.html --public-url ./"
+  },
+  "dependencies": {
+    "phaser": "^3.55.2"
+  },
+  "devDependencies": {
+    "parcel-bundler": "^1.12.5"
+  }
+} 
