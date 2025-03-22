@@ -53,39 +53,34 @@ export class LoadingScene extends Phaser.Scene {
 
     // Create simple placeholder assets during development
     createPlaceholderAssets() {
-        console.log("Creating placeholder assets");
+        // Debug logging
+        console.log('Creating placeholder assets');
         
-        // Player placeholder
-        this.createColoredCircle('player', 0x00ff00, 32);
+        // Player
+        this.createColoredCircle('player', 0xffffff, 24);
         
-        // Enemy placeholder
-        this.createColoredCircle('enemy', 0xff0000, 32);
+        // Enemy
+        this.createColoredCircle('enemy', 0xff0000, 20);
         
-        // Bullet placeholder
-        this.createColoredCircle('bullet', 0xffff00, 8);
+        // Projectile
+        this.createColoredCircle('bullet', 0x00ffff, 8);
         
-        // Shuriken placeholder
-        this.createStar('shuriken', 0xcccccc, 24);
+        // Create a special XP orb with glow effect
+        this.createXPOrbTexture();
         
         // Health pickup placeholder
         this.createColoredCircle('healthPickup', 0xff00ff, 16);
         
-        // XP orb placeholder
-        this.createColoredCircle('xpOrb', 0x00ffff, 16);
+        // Simple background
+        this.createBackground('background');
         
-        // Background placeholder - dark gray
-        this.createBackground('background', 0x333333, 1280, 720);
+        // Panel textures
+        this.createPanel('panel', 0x3333aa, 200, 200);
         
-        // Button placeholder - blue button
-        this.createColoredRectangle('button', 0x4444dd, 200, 50, 8);
+        // Button texture
+        this.createPanel('button', 0x4444cc, 150, 50);
         
-        // Panel placeholder - dark panel with border
-        this.createColoredRectangle('panel', 0x222222, 800, 600, 16);
-        
-        // Particle placeholder
-        this.createColoredCircle('particle', 0xffffff, 8);
-        
-        console.log("Finished creating placeholder assets");
+        console.log('Placeholder assets created');
     }
 
     createColoredCircle(key, color, size) {
@@ -273,6 +268,44 @@ export class LoadingScene extends Phaser.Scene {
             console.log(`Created fallback texture for: ${key}`);
         } catch (e) {
             console.error(`Critical error: Failed to create fallback texture for ${key}:`, e);
+        }
+    }
+
+    // Create a special XP orb texture with glow effect
+    createXPOrbTexture() {
+        try {
+            const size = 24; // Larger size for better visibility
+            
+            // Check if the texture already exists
+            if (this.textures.exists('xpOrb')) {
+                console.log('XP orb texture already exists');
+                return;
+            }
+            
+            // Create a graphics object
+            const graphics = this.add.graphics();
+            
+            // Draw outer glow
+            graphics.fillStyle(0x00ffff, 0.3);
+            graphics.fillCircle(size/2, size/2, size/2);
+            
+            // Draw inner circle
+            graphics.fillStyle(0x00ffff, 0.7);
+            graphics.fillCircle(size/2, size/2, size/3);
+            
+            // Draw bright center
+            graphics.fillStyle(0xffffff, 1);
+            graphics.fillCircle(size/2, size/2, size/6);
+            
+            // Generate texture
+            graphics.generateTexture('xpOrb', size, size);
+            graphics.destroy();
+            
+            console.log('Created XP orb texture with glow effect');
+        } catch (error) {
+            console.error('Failed to create XP orb texture:', error);
+            // Fallback to simple circle
+            this.createColoredCircle('xpOrb', 0x00ffff, 16);
         }
     }
 } 

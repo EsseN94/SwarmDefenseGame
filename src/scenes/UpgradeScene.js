@@ -15,18 +15,31 @@ export class UpgradeScene extends Phaser.Scene {
         
         // Check if game state is initialized
         if (!window.gameState) {
-            console.error("Game state not initialized!");
+            console.error("Game state not initialized! Creating default state...");
             window.gameState = {
                 gold: 5000,
-                stats: {}
+                stats: {},
+                playerXP: 0,
+                playerLevel: 1,
+                xpToNextLevel: 100,
+                highestWave: 0
             };
         }
         
         // Ensure stats are properly initialized
         this.initializeDefaultStats();
         
+        console.log("Stats after initialization:", Object.keys(window.gameState.stats));
+        console.log("Number of stats:", Object.keys(window.gameState.stats).length);
+        console.log("Gold:", window.gameState.gold);
+        
         // Background
         this.add.image(this.cameras.main.width / 2, this.cameras.main.height / 2, 'background');
+        
+        // Add subtle gradient overlay for better readability
+        const overlay = this.add.graphics();
+        overlay.fillGradientStyle(0x000022, 0x000022, 0x000066, 0x000066, 0.7);
+        overlay.fillRect(0, 0, this.cameras.main.width, this.cameras.main.height);
         
         // Title
         const titleText = this.add.text(
@@ -75,6 +88,7 @@ export class UpgradeScene extends Phaser.Scene {
         // Initialize each stat if it doesn't exist
         for (const stat of defaultStats) {
             if (!window.gameState.stats[stat.key]) {
+                console.log(`Creating stat: ${stat.key}`);
                 window.gameState.stats[stat.key] = {
                     level: 0,
                     value: stat.value,
@@ -84,15 +98,102 @@ export class UpgradeScene extends Phaser.Scene {
                     displayName: stat.displayName,
                     description: stat.description
                 };
+            } else {
+                console.log(`Stat ${stat.key} already exists with level ${window.gameState.stats[stat.key].level}`);
             }
         }
         
         console.log('Stats initialized:', Object.keys(window.gameState.stats));
+        
+        // Make sure we at least have the experienceGain stat for XP collection
+        if (!window.gameState.stats.experienceGain || typeof window.gameState.stats.experienceGain !== 'object') {
+            window.gameState.stats.experienceGain = {
+                level: 0,
+                value: 1,
+                maxLevel: 5,
+                baseCost: 150,
+                increment: 0.1,
+                displayName: "Experience Gain",
+                description: "Increases XP gained from orbs"
+            };
+        }
+        
+        // Force-add some known stats for debugging
+        if (this.debugMode && Object.keys(window.gameState.stats).length < 3) {
+            console.log("Adding debug stats since few were found");
+            window.gameState.stats = {
+                damage: {
+                    level: 0,
+                    value: 1,
+                    maxLevel: 5,
+                    baseCost: 100,
+                    increment: 0.1,
+                    displayName: "Attack Damage",
+                    description: "Increases damage dealt to enemies"
+                },
+                maxHealth: {
+                    level: 0,
+                    value: 1000,
+                    maxLevel: 5,
+                    baseCost: 100,
+                    increment: 150,
+                    displayName: "Maximum Health",
+                    description: "Increases your maximum health"
+                },
+                moveSpeed: {
+                    level: 0,
+                    value: 1,
+                    maxLevel: 5,
+                    baseCost: 150,
+                    increment: 0.09,
+                    displayName: "Movement Speed",
+                    description: "Move faster"
+                },
+                experienceGain: {
+                    level: 0,
+                    value: 1,
+                    maxLevel: 5,
+                    baseCost: 150,
+                    increment: 0.1,
+                    displayName: "Experience Gain",
+                    description: "Increases XP gained from orbs"
+                }
+            };
+        }
     }
 
     createUpgradeList() {
         console.log('Creating upgrade list...');
         console.log('Available stats:', Object.keys(window.gameState.stats));
+        
+        // Validate our stats are actual objects
+        for (const key in window.gameState.stats) {
+            if (typeof window.gameState.stats[key] !== 'object' || window.gameState.stats[key] === null) {
+                console.error(`Stat ${key} is not a valid object:`, window.gameState.stats[key]);
+                // Fix it with defaults
+                window.gameState.stats[key] = {
+                    level: 0,
+                    value: 1,
+                    maxLevel: 5,
+                    baseCost: 100,
+                    increment: 0.1,
+                    displayName: key,
+                    description: "Upgrades this stat"
+                };
+            }
+        }
+        
+        // List of upgradable stat keys (to filter out tracking stats)
+        const upgradableStats = [
+            'damage', 'armor', 'maxHealth', 'healthRegen', 
+            'moveSpeed', 'pickupRadius', 'experienceGain'
+        ];
+        
+        // Log available upgradable stats
+        console.log("Checking available upgradable stats:");
+        for (const key of upgradableStats) {
+            console.log(`${key}: ${window.gameState.stats[key] ? 'Available' : 'Missing'}`);
+        }
         
         // Basic panel with border for visibility
         const panelBg = this.add.rectangle(
@@ -103,6 +204,17 @@ export class UpgradeScene extends Phaser.Scene {
             0x0a0a2a,
             0.95
         ).setOrigin(0.5);
+        
+        // Add border to panel
+        const panelBorder = this.add.rectangle(
+            this.cameras.main.width / 2,
+            this.cameras.main.height / 2 + 50,
+            700,
+            500,
+            0x3039a0,
+            0
+        ).setOrigin(0.5);
+        panelBorder.setStrokeStyle(2, 0x4444bb);
         
         // Header
         const headerBar = this.add.rectangle(
@@ -126,7 +238,7 @@ export class UpgradeScene extends Phaser.Scene {
             }
         ).setOrigin(0.5);
         
-        // Gold display
+        // Gold display with icon
         const goldIcon = this.add.rectangle(
             120,
             100,
@@ -147,7 +259,7 @@ export class UpgradeScene extends Phaser.Scene {
             }
         ).setOrigin(0, 0.5);
         
-        // Back button
+        // Back button with improved styling
         const backButton = this.add.rectangle(
             120,
             50,
@@ -156,6 +268,7 @@ export class UpgradeScene extends Phaser.Scene {
             0x3039a0,
             0.9
         ).setOrigin(0.5);
+        backButton.setStrokeStyle(2, 0x4444bb);
         
         const backText = this.add.text(
             120,
@@ -168,6 +281,12 @@ export class UpgradeScene extends Phaser.Scene {
         ).setOrigin(0.5);
         
         backButton.setInteractive({ useHandCursor: true });
+        backButton.on('pointerover', () => {
+            backButton.fillColor = 0x4048c0;
+        });
+        backButton.on('pointerout', () => {
+            backButton.fillColor = 0x3039a0;
+        });
         backButton.on('pointerup', () => {
             this.scene.start('MenuScene');
         });
@@ -179,16 +298,13 @@ export class UpgradeScene extends Phaser.Scene {
         // Store button positions separately instead of on the stat objects
         this.buttonPositions = {};
         
-        // List of upgradable stat keys (to filter out tracking stats)
-        const upgradableStats = [
-            'damage', 'armor', 'maxHealth', 'healthRegen', 
-            'moveSpeed', 'pickupRadius'
-        ];
-        
         // Create a button for each upgradable stat
         for (const key of upgradableStats) {
             // Skip if this stat doesn't exist in the game state
-            if (!window.gameState.stats[key]) continue;
+            if (!window.gameState.stats[key]) {
+                console.warn(`Stat ${key} not found in game state`);
+                continue;
+            }
             
             const stat = window.gameState.stats[key];
             
@@ -216,6 +332,7 @@ export class UpgradeScene extends Phaser.Scene {
                 buttonColor,
                 0.9
             ).setOrigin(0.5);
+            button.setStrokeStyle(2, 0x4444bb);
             
             // Stat name
             const nameText = this.add.text(
@@ -239,9 +356,20 @@ export class UpgradeScene extends Phaser.Scene {
                 }
             ).setOrigin(0, 0.5);
             
+            // Current value display
+            const valueText = this.add.text(
+                this.cameras.main.width / 2 + 100,
+                y - 15,
+                `Current: ${this.formatStatValue(key, stat.value)}`,
+                {
+                    font: '18px Arial',
+                    fill: '#ffffff'
+                }
+            ).setOrigin(0.5);
+            
             // Level display
             const levelText = this.add.text(
-                this.cameras.main.width / 2 + 180,
+                this.cameras.main.width / 2 + 230,
                 y - 15,
                 `Level ${stat.level}/${stat.maxLevel}`,
                 {
@@ -285,6 +413,7 @@ export class UpgradeScene extends Phaser.Scene {
                         
                         // Update UI
                         levelText.setText(`Level ${stat.level}/${stat.maxLevel}`);
+                        valueText.setText(`Current: ${this.formatStatValue(key, stat.value)}`);
                         const newCost = stat.baseCost + (stat.level * 50);
                         costText.setText(stat.level >= stat.maxLevel ? 'MAXED' : `Cost: ${newCost} Gold`);
                         costText.setFill(window.gameState.gold >= newCost ? '#ffff00' : '#ff6666');
@@ -324,6 +453,20 @@ export class UpgradeScene extends Phaser.Scene {
         }
         
         console.log(`Created ${buttonCount} upgrade buttons`);
+        
+        // Add debug text if no buttons created and debug mode is on
+        if (buttonCount === 0 && this.debugMode) {
+            this.add.text(
+                this.cameras.main.width / 2,
+                300,
+                'NO UPGRADES FOUND!\nCheck console for details.',
+                {
+                    font: 'bold 24px Arial',
+                    fill: '#ff0000',
+                    align: 'center'
+                }
+            ).setOrigin(0.5);
+        }
     }
 
     // Format stat display names more clearly
@@ -354,8 +497,14 @@ export class UpgradeScene extends Phaser.Scene {
 
     showUpgradeEffect(x, y) {
         try {
-            // Add visual feedback with flash
-            this.cameras.main.flash(200, 255, 255, 255, 0.3);
+            // Add visual feedback with particles
+            if (this.particleManager) {
+                this.particleManager.createUpgradeEffect(x, y);
+            } else {
+                // Fallback to simple effects
+                // Add visual feedback with flash
+                this.cameras.main.flash(200, 255, 255, 255, 0.3);
+            }
             
             // Add scale animation to gold text
             this.tweens.add({

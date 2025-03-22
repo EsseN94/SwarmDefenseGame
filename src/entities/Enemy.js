@@ -15,9 +15,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.health = 100;
         this.maxHealth = 100;
         this.damage = 20;
-        this.speed = 100;
+        this.speed = 50; // Reduced by 50% from 100
         this.xpValue = 10;
         this.active = false;
+        this.damageTaken = 0; // Track damage taken for XP drops
         
         // AI properties
         this.aiType = 'chase'; // Default AI type
@@ -33,9 +34,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.healthBarBg = this.scene.add.rectangle(0, -20, 40, 5, 0x000000, 0.7);
         this.healthBar = this.scene.add.rectangle(0, -20, 40, 5, 0xff0000);
         
-        // Add health bar to the scene
+        // Add health bar to the scene but make it invisible initially
         this.healthBarBg.setDepth(6);
         this.healthBar.setDepth(7);
+        this.healthBarBg.visible = false;
+        this.healthBar.visible = false;
         
         // Set depth for layering
         this.setDepth(5);
@@ -46,9 +49,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.health = health;
         this.maxHealth = health;
         this.damage = damage;
-        this.speed = speed;
+        this.speed = speed * 0.5; // Apply 50% speed reduction
         this.xpValue = Math.floor(health / 10); // XP scales with health
         this.aiType = aiType;
+        this.damageTaken = 0; // Reset damage taken
         
         // Reset state
         this.active = true;
@@ -62,7 +66,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.body.reset(this.x, this.y);
         this.setVelocity(0, 0);
         
-        console.log(`Enemy setup with ${health} health, ${damage} damage, ${speed} speed, type: ${aiType}`);
+        console.log(`Enemy setup with ${health} health, ${damage} damage, ${speed * 0.5} speed (reduced), type: ${aiType}`);
         
         return this;
     }
@@ -85,18 +89,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.specialAbilityCooldown -= deltaTime;
         }
         
-        // Only update health bars if they exist
-        if (this.healthBar && this.healthBarBg) {
+        // Only update health bars if they exist and are visible (enemy has taken damage)
+        if (this.healthBar && this.healthBarBg && this.damageTaken > 0) {
             // Update health bar position and width
             this.healthBarBg.x = this.x;
             this.healthBarBg.y = this.y - 20;
             this.healthBar.x = this.x - 20 + (this.health / this.maxHealth * 40) / 2;
             this.healthBar.y = this.y - 20;
             this.healthBar.width = (this.health / this.maxHealth) * 40;
-            
-            // Show health bar
-            this.healthBarBg.visible = true;
-            this.healthBar.visible = true;
         }
     }
 
@@ -544,9 +544,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         
         // Apply damage
         this.health -= amount;
+        this.damageTaken += amount; // Track total damage taken
         
-        // Update health bar
-        if (this.healthBar) {
+        // Make health bars visible when damaged
+        if (this.healthBar && this.healthBarBg) {
+            this.healthBarBg.visible = true;
+            this.healthBar.visible = true;
+            
+            // Update health bar
             this.healthBar.width = (this.health / this.maxHealth) * 40;
             this.healthBar.x = this.x - 20 + (this.health / this.maxHealth * 40) / 2;
             
@@ -608,6 +613,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     die() {
         try {
+            // Capture position before we destroy anything
+            const enemyX = this.x;
+            const enemyY = this.y;
+            console.log(`Enemy dying at position: (${enemyX}, ${enemyY})`);
+            
             // Destroy health bars FIRST before anything else
             if (this.healthBar) {
                 this.healthBar.visible = false;
@@ -627,22 +637,80 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.setVisible(false);
             
             // Create death effect
-            this.scene.particleManager?.createExplosion(this.x, this.y);
+            this.scene.particleManager?.createExplosion(enemyX, enemyY);
+            
+            // Calculate XP based on damage taken (minimum value of 1)
+            const xpToGive = Math.max(10, Math.floor(this.damageTaken / 10));
             
             // Improved XP orb spawning - create multiple orbs
-            const xpCount = Math.max(1, Math.floor(this.xpValue / 10));
+            const xpCount = Math.max(1, Math.min(3, Math.floor(xpToGive / 5))); // At most 3 orbs
             
-            for (let i = 0; i < xpCount; i++) {
-                // Random position near enemy
-                const offsetX = (Math.random() * 40) - 20;
-                const offsetY = (Math.random() * 40) - 20;
-                
-                // Create XP orb with a portion of the XP value
-                this.scene.spawnXPOrb(
-                    this.x + offsetX,
-                    this.y + offsetY,
-                    Math.ceil(this.xpValue / xpCount)
-                );
+            console.log(`Dropping ${xpCount} XP orbs with total value ${xpToGive}`);
+            
+            // DIRECT XP ORB CREATION - no method call
+            if (this.scene && this.scene.xpOrbs) {
+                for (let i = 0; i < xpCount; i++) {
+                    try {
+                        // Random position near enemy
+                        const offsetX = (Math.random() * 40) - 20;
+                        const offsetY = (Math.random() * 40) - 20;
+                        const orbX = enemyX + offsetX;
+                        const orbY = enemyY + offsetY;
+                        
+                        // Get orb from pool if possible
+                        const xpOrb = this.scene.xpOrbs.get(orbX, orbY);
+                        
+                        if (xpOrb) {
+                            const orbValue = Math.ceil(xpToGive / xpCount);
+                            console.log(`Created XP orb at (${orbX}, ${orbY}) with value ${orbValue}`);
+                            
+                            xpOrb.setPosition(orbX, orbY);
+                            xpOrb.setActive(true);
+                            xpOrb.setVisible(true);
+                            
+                            // Use setup method if it exists
+                            if (typeof xpOrb.setup === 'function') {
+                                xpOrb.setup(orbValue);
+                            } else {
+                                // Manual setup
+                                xpOrb.value = orbValue;
+                                xpOrb.attractionRange = 100;
+                                xpOrb.attractionSpeed = 0;
+                                xpOrb.collected = false;
+                                
+                                // Set random velocity for scatter effect
+                                const angle = Math.random() * Math.PI * 2;
+                                const speed = Math.random() * 50 + 50;
+                                xpOrb.setVelocity(
+                                    Math.cos(angle) * speed,
+                                    Math.sin(angle) * speed
+                                );
+                            }
+                            
+                            // Add delay before allowing collection
+                            this.scene.time.delayedCall(300, () => {
+                                if (xpOrb && xpOrb.active) {
+                                    xpOrb.readyForCollection = true;
+                                }
+                            });
+                        }
+                    } catch (orbError) {
+                        console.error('Failed to create XP orb:', orbError);
+                    }
+                }
+            } else if (this.scene && typeof this.scene.spawnXPOrb === 'function') {
+                // Fallback to scene's spawnXPOrb method if direct creation failed
+                for (let i = 0; i < xpCount; i++) {
+                    const offsetX = (Math.random() * 40) - 20;
+                    const offsetY = (Math.random() * 40) - 20;
+                    this.scene.spawnXPOrb(
+                        enemyX + offsetX,
+                        enemyY + offsetY,
+                        Math.ceil(xpToGive / xpCount)
+                    );
+                }
+            } else {
+                console.error('Failed to spawn XP orbs: scene or xpOrbs group not available');
             }
             
             // Reset body and position to ensure it's fully removed
@@ -654,7 +722,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
             
             // Small chance to spawn a health pickup
             if (Math.random() < 0.05) {
-                this.scene.spawnHealthPickup?.(this.x, this.y, 50);
+                if (this.scene && typeof this.scene.spawnHealthPickup === 'function') {
+                    this.scene.spawnHealthPickup(enemyX, enemyY, 50);
+                }
             }
         } catch (error) {
             console.error('Error in enemy die method:', error);
